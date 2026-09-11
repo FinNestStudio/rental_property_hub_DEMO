@@ -3469,7 +3469,8 @@ function viewDashboard() {
   h += card('Performance by property', propertyPerformanceTable(compSorted), {
     hint: 'Income, expenses and net result for ' + (r.label || 'the selected period'),
     flush: true,
-    actions: '<button class="btn btn-sm" data-act="go-reports">' + ico('chart') + 'Full report</button>'
+    actions: '<button class="btn btn-sm" data-act="go-reports">' + ico('chart') + 'Full report</button>' +
+      '<button class="btn btn-sm" data-act="go-years">' + ico('up') + 'Five-year view</button>'
   });
   h += card('What stands out', '<div class="stack" style="gap:10px">' + buildInsights(r).map(insightRow).join('') + '</div>',
     { hint: 'Automatic observations, calculated on this device' });
@@ -4994,6 +4995,7 @@ function viewReports() {
     { id: 'pl', label: 'Profit & loss' },
     { id: 'compare', label: 'Property comparison' },
     { id: 'monthly', label: 'Monthly performance' },
+    { id: 'years', label: 'Five-year view' },
     { id: 'cash', label: 'Cash flow' },
     { id: 'business', label: 'Rental business' }
   ];
@@ -5005,6 +5007,7 @@ function viewReports() {
 
   if (UI.reportTab === 'compare') h += repCompare(r);
   else if (UI.reportTab === 'monthly') h += repMonthly(r);
+  else if (UI.reportTab === 'years') h += repYears();
   else if (UI.reportTab === 'cash') h += repCash(r);
   else if (UI.reportTab === 'business') h += repBusiness(r);
   else h += repPL(r);
@@ -5173,6 +5176,104 @@ function repMonthly(r) {
       '<div class="tx">Average monthly net result is <strong>' + money(Math.abs(improving)) + '</strong> ' + (improving >= 0 ? 'higher' : 'lower') + ' in the second half of this range than the first.</div></div>' : '') +
     '</div></section>';
   h += card('Month by month', body, { flush: true });
+  return h;
+}
+
+/* --- five-year view --------------------------------------------------------
+   Always the last five financial years, whatever period is selected elsewhere:
+   a year-by-year report driven by the period picker would end up comparing a
+   year with itself. Each year is worked out by the same portfolioPL() every
+   other report uses, so a row here matches the year-end summary for that year.
+   ========================================================================== */
+var YEARS_SHOWN = 5;
+
+function yearRows(count) {
+  var rows = [];
+  for (var i = count - 1; i >= 0; i--) {
+    var fy = fyRange(-i);
+    var pl = portfolioPL(fy);
+    rows.push({
+      startYear: fy.fyStartYear, from: fy.from, to: fy.to, label: fyLabel(fy.fyStartYear),
+      collected: pl.rentCollected, other: pl.otherIncome, income: pl.totalIncome,
+      expenses: pl.operatingTotal, maintenance: pl.maintenance, business: pl.businessTotal,
+      net: pl.netOperating, afterBusiness: pl.netAfterBusiness, cashFlow: pl.cashFlow,
+      financingIsEstimate: pl.financingIsEstimate, collectionRate: pl.collectionRate
+    });
+  }
+  /* Drop empty years at the front, so a landlord in their first year does not
+     open on four blank rows. The year in progress is always kept. */
+  while (rows.length > 1 && rows[0].income <= EPS && rows[0].expenses <= EPS) rows.shift();
+  return rows;
+}
+
+function repYears() {
+  var rows = yearRows(YEARS_SHOWN);
+  var props = activeProperties();
+  var fs = clamp(Math.floor(num(S.settings.fyStartMonth) || 1), 1, 12);
+  var first = rows[0], last = rows[rows.length - 1];
+  var change = rows.length > 1 ? round2(last.net - first.net) : null;
+
+  var body = '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+    '<th scope="col">Year</th><th class="r" scope="col">Rent collected</th><th class="r" scope="col">Other income</th>' +
+    '<th class="r" scope="col">Expenses</th><th class="r" scope="col">Maintenance</th>' +
+    '<th class="r" scope="col">Net income</th><th class="r" scope="col">After financing</th>' +
+    '<th class="r" scope="col">Collection</th></tr></thead><tbody>';
+  rows.slice().reverse().forEach(function (y) {
+    body += '<tr><td class="n">' + esc(y.label) + '</td>' +
+      '<td class="r n">' + money(y.collected) + '</td>' +
+      '<td class="r n">' + (y.other > EPS ? money(y.other) : '<span class="muted">—</span>') + '</td>' +
+      '<td class="r n">' + money(y.expenses) + '</td>' +
+      '<td class="r n">' + (y.maintenance > EPS ? money(y.maintenance) : '<span class="muted">—</span>') + '</td>' +
+      '<td class="r n"><strong class="' + (y.net >= 0 ? 'pos' : 'neg') + '">' + money(y.net) + '</strong></td>' +
+      '<td class="r n">' + money(y.cashFlow) + '</td>' +
+      '<td class="r n">' + pctCell(y.collectionRate) + '</td></tr>';
+  });
+  body += '</tbody><tfoot><tr><td>' + esc(rows.length + ' ' + plural(rows.length, 'year')) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.collected; })) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.other; })) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.expenses; })) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.maintenance; })) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.net; })) + '</td>' +
+    '<td class="r n">' + money(sum(rows, function (y) { return y.cashFlow; })) + '</td>' +
+    '<td></td></tr></tfoot></table></div>';
+
+  var h = '<section class="card"><div class="card-head">' +
+    '<div><h3>Five-year view</h3><div class="hint">' +
+      esc('Whole portfolio · ' + (rows.length === 1 ? first.label : first.label + ' to ' + last.label)) + '</div></div>' +
+    '<div class="spacer"></div>' +
+    '<button class="btn btn-sm" data-act="export-years">' + ico('download') + 'Export CSV</button>' +
+    '<button class="btn btn-sm" data-act="print">' + ico('print') + 'Print</button>' +
+    '</div><div class="card-body">' + chartMonthly(rows, { aria: 'Income, expenses and net result by year' }) +
+    (change !== null ? insightRow({
+      kind: change >= 0 ? 'pos' : 'warn', icon: change >= 0 ? 'up' : 'down',
+      text: 'Net income in ' + esc(last.label) + ' is <strong>' + money(Math.abs(change)) + '</strong> ' +
+        (change >= 0 ? 'higher' : 'lower') + ' than in ' + esc(first.label) + '.'
+    }) : '') +
+    '<div class="note" style="margin-top:12px">Always the last ' + rows.length + ' ' + plural(rows.length, 'year') +
+      ', so this report sets its own dates.' + (fs !== 1 ? ' Years follow the financial year start in Settings.' : '') +
+      ' The year in progress is counted up to today.' +
+      (rows.some(function (y) { return y.financingIsEstimate; })
+        ? ' Where a year has no recorded mortgage payments, "After financing" uses the monthly estimate on the property record, for every month in that year.'
+        : '') + '</div>' +
+    '</div></section>';
+
+  h += card('Year by year', body, { flush: true });
+
+  if (props.length) {
+    var matrix = '<div class="table-wrap"><table class="tbl"><thead><tr><th scope="col">Property</th>' +
+      rows.map(function (y) { return '<th class="r" scope="col">' + esc(y.label) + '</th>'; }).join('') +
+      '<th class="r" scope="col">Total</th></tr></thead><tbody>';
+    props.forEach(function (p) {
+      var vals = rows.map(function (y) { return propertyPL(p.id, { from: y.from, to: y.to }).netOperating; });
+      matrix += '<tr><td><button class="linkish" data-act="open-property" data-id="' + attr(p.id) + '">' + esc(p.name) + '</button></td>' +
+        vals.map(function (v) { return '<td class="r n">' + moneyCell(v) + '</td>'; }).join('') +
+        '<td class="r n"><strong>' + money(sum(vals, function (v) { return v; })) + '</strong></td></tr>';
+    });
+    matrix += '</tbody><tfoot><tr><td>Portfolio</td>' +
+      rows.map(function (y) { return '<td class="r n">' + money(y.net) + '</td>'; }).join('') +
+      '<td class="r n">' + money(sum(rows, function (y) { return y.net; })) + '</td></tr></tfoot></table></div>';
+    h += card('Net income by property and year', matrix, { flush: true, hint: 'Operating result, before any mortgage' });
+  }
   return h;
 }
 
@@ -7366,6 +7467,17 @@ function exportComparisonCSV(r) {
         c.collectionRate === null ? '' : c.collectionRate.toFixed(1), moneyRaw(c.avgRent)];
     }));
 }
+function exportYearsCSV() {
+  var rows = yearRows(YEARS_SHOWN);
+  return saveCSV('five-year-view',
+    ['Year', 'From', 'To', 'Rent Collected', 'Other Income', 'Expenses', 'Maintenance',
+     'Net Income', 'After Business Costs', 'Cash Flow After Financing', 'Collection Rate %'],
+    rows.map(function (y) {
+      return [y.label, y.from, y.to, moneyRaw(y.collected), moneyRaw(y.other), moneyRaw(y.expenses),
+        moneyRaw(y.maintenance), moneyRaw(y.net), moneyRaw(y.afterBusiness), moneyRaw(y.cashFlow),
+        y.collectionRate === null ? '' : y.collectionRate.toFixed(1)];
+    }));
+}
 /** Every money movement in one flat file, sorted by date. */
 function exportLedgerCSV(r) {
   var rows = [];
@@ -7960,7 +8072,10 @@ function renderNav() {
 
 function renderTopActions() {
   var v = UI.view, h = '';
-  var showPeriod = ['dashboard', 'property', 'expenses', 'maintenance', 'reports'].indexOf(v) >= 0;
+  /* The five-year view sets its own dates, so a period picker beside it would
+     be a control that changes nothing on screen. */
+  var showPeriod = ['dashboard', 'property', 'expenses', 'maintenance', 'reports'].indexOf(v) >= 0 &&
+    !(v === 'reports' && UI.reportTab === 'years');
   if (showPeriod) h += periodPicker();
   if (v === 'properties' || v === 'property') h += '<button class="btn" data-act="new-property">' + ico('plus') + 'Add property</button>';
   if (v === 'expenses') {
@@ -8052,6 +8167,7 @@ var ACTIONS = {
   'go-deposits': function () { go('tenants', { tenantTab: 'deposits' }); },
   'go-maint': function () { UI.maintFilter.status = 'open'; go('maintenance'); },
   'go-reports': function () { go('reports', { reportTab: 'compare' }); },
+  'go-years': function () { go('reports', { reportTab: 'years' }); },
   'go-recurring': function () { go('expenses', { expTab: 'recurring' }); },
   'open-property': function (el) {
     UI.propertyId = el.getAttribute('data-id');
@@ -8138,6 +8254,7 @@ var ACTIONS = {
   'export-tenants': function () { exportTenantsCSV(); },
   'export-monthly': function () { exportMonthlyCSV(currentRange()); },
   'export-comparison': function () { exportComparisonCSV(currentRange()); },
+  'export-years': function () { exportYearsCSV(); },
   'export-one': function (el) { exportOne(el.getAttribute('data-kind'), exportRange()); },
   'export-all': function () { exportEverything(exportRange()); },
   'csv-import': function () { openCSVImport(); },

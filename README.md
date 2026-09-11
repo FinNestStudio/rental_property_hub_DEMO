@@ -14,8 +14,8 @@ No download. No sign-up. No email address.
 A private landlord dashboard for rent, expenses, maintenance and profit,
 property by property. See who has paid and what is still due, record full or
 part payments, keep property costs and business costs apart, track repairs
-from reported to fixed, and get profit & loss, cash flow and a year-end
-summary without writing a single formula.
+from reported to fixed, and get profit & loss, cash flow, a five-year view and
+a year-end summary without writing a single formula.
 
 The demo is the real app, opened on a sample portfolio of three properties and
 six units so there is something to explore straight away. Everything works. You
