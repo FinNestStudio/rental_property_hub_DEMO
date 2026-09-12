@@ -34,7 +34,7 @@ Download your backup from the demo first. The full version opens it exactly as
 you left it, with every property, tenant, lease, payment, expense and repair
 still in place. Nothing has to be typed twice.
 
-**[Get Rental Property Hub on Etsy →](https://www.etsy.com/shop/FinNestStudio?ref=demo)**
+**[Get Rental Property Hub on Etsy →](https://www.etsy.com/listing/4573597978/rental-property-tracker-for-landlords?ref=demo)**
 
 ---
 
